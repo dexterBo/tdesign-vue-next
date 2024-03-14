@@ -12,7 +12,7 @@ export default defineComponent({
   props: { ...props },
   emits: ['click'],
   setup(props, ctx) {
-    const { href, target = '_self' } = toRefs(props);
+    const { href, target } = toRefs(props);
     const classPrefix = usePrefixClass();
     const menu = inject<TdMenuInterface>('TdMenu');
     const itemRef = ref<HTMLElement>();
@@ -31,7 +31,7 @@ export default defineComponent({
     ]);
     // lifetimes
     onMounted(() => {
-      menu?.vMenu?.add({ value: props.value, parent: submenu?.value, vnode: ctx.slots.default });
+      menu?.vMenu?.add({ value: props.value, parent: submenu?.value, vnode: ctx.slots.default, ...props });
     });
 
     return {
@@ -43,6 +43,7 @@ export default defineComponent({
       itemRef,
       href,
       target,
+      submenu,
     };
   },
   methods: {
@@ -50,7 +51,7 @@ export default defineComponent({
       e.stopPropagation();
       if (this.disabled) return;
       this.menu.select(this.value);
-      emitEvent(this, 'click', { e });
+      emitEvent(this, 'click', { e, value: this.value });
       if (this.to || (this.routerLink && this.href)) {
         const router = this.router || this.$router;
         const methods: string = this.replace ? 'replace' : 'push';
@@ -66,6 +67,7 @@ export default defineComponent({
           }
         });
       }
+      this.submenu?.closeParentPopup?.(e);
     },
   },
   render() {

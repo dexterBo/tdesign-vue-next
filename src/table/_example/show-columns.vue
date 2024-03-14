@@ -1,6 +1,6 @@
 <template>
   <div>
-    <t-table row-key="id" :columns="columns" :data="data" show-columns>
+    <t-table row-key="id" :columns="columns" :data="data" show-columns lazy-load>
       <template #status="{ row }">
         <p v-if="row.status === 0" class="status">健康</p>
         <p v-if="row.status === 1" class="status unhealth">异常</p>
@@ -23,11 +23,10 @@ const columns = [
     colKey: 'status',
     title: '状态',
     width: 100,
-    scopedSlots: { col: 'status' },
   },
   { colKey: 'owner', title: '管理员' },
   { colKey: 'description', title: '描述' },
-  { colKey: 'op', width: 200, scopedSlots: { title: 'op-column', col: 'op' } },
+  { colKey: 'op', width: 200 },
 ];
 const data = [
   {

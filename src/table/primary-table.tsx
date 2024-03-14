@@ -1,4 +1,4 @@
-import { computed, defineComponent, toRefs, h, ref, onMounted, SetupContext } from 'vue';
+import { computed, defineComponent, toRefs, h, ref, onMounted, getCurrentInstance } from 'vue';
 import get from 'lodash/get';
 import omit from 'lodash/omit';
 import baseTableProps from './base-table-props';
@@ -17,9 +17,11 @@ import useAsyncLoading from './hooks/useAsyncLoading';
 import EditableCell, { EditableCellProps } from './editable-cell';
 import { PageInfo } from '../pagination';
 import useClassName from './hooks/useClassName';
+import { useConfig } from '../hooks/useConfig';
 import useEditableRow from './hooks/useEditableRow';
 import useStyle from './hooks/useStyle';
 import { ScrollToElementParams } from '../hooks/useVirtualScrollNew';
+import { BaseTableProps } from './interface';
 
 export { BASE_TABLE_ALL_EVENTS } from './base-table';
 
@@ -32,10 +34,33 @@ const OMIT_PROPS = [
   'filterRow',
   'sortOnRowDraggable',
   'expandOnRowClick',
+  'expand-on-row-click',
+  'expanded-row',
+  'editable-row-keys',
+  'editable-cell-state',
+  'filter-value',
   'multipleSort',
   'expandIcon',
+  'expand-icon',
   'reserveSelectedRowOnPaginate',
+  'expandedRowKeys',
+  'expandedRow',
+  'reserve-selected-row-on-paginate',
+  'reserveSelectedRowOnPaginate',
+  'selected-row-keys',
+  'selectedRowKeys',
   'selectOnRowClick',
+  'column-controller',
+  'columnController',
+  'dragSort',
+  'drag-sort',
+  'hideSortTips',
+  'showSortColumnBgColor',
+  'filter-row',
+  'filterRow',
+  'multiple-sort',
+  'multipleSort',
+  'async-loading',
   'onChange',
   'onAsyncLoadingClick',
   'onColumnChange',
@@ -57,29 +82,39 @@ export default defineComponent({
     ...primaryTableProps,
   },
 
-  setup(props: TdPrimaryTableProps, context: SetupContext) {
+  setup(props, context) {
     const renderTNode = useTNodeJSX();
     const { columns, columnController } = toRefs(props);
     const primaryTableRef = ref(null);
+    const showElement = ref(false);
 
     const { classPrefix, tableDraggableClasses, tableBaseClass, tableSelectedClasses, tableSortClasses } =
       useClassName();
+    const { globalConfig } = useConfig('table', props.locale);
     const { sizeClassNames } = useStyle(props);
+    const tableSize = computed(() => props.size ?? globalConfig.value.size);
     // 自定义列配置功能
     const { tDisplayColumns, renderColumnController } = useColumnController(props, context);
+
     // 展开/收起行功能
     const { showExpandedRow, showExpandIconColumn, getExpandColumn, renderExpandedRow, onInnerExpandRowClick } =
       useRowExpand(props, context);
+
     // 排序功能
     const { renderSortIcon } = useSorter(props, context);
+
     // 行选中功能
     const {
+      selectColumn,
+      showRowSelect,
       selectedRowClassNames,
       currentPaginateData,
       formatToRowSelectColumn,
       setTSelectedRowKeys,
       onInnerSelectRowClick,
+      handleRowSelectWithAreaSelection,
     } = useRowSelect(props, tableSelectedClasses);
+
     // 过滤功能
     const {
       hasEmptyCondition,
@@ -90,12 +125,22 @@ export default defineComponent({
     } = useFilter(props, context);
 
     // 拖拽排序功能
-    const { isRowHandlerDraggable, isRowDraggable, isColDraggable, setDragSortPrimaryTableRef, setDragSortColumns } =
-      useDragSort(props, context);
+    const dragSortParams = computed(() => ({
+      showElement: showElement.value,
+    }));
+    const {
+      isRowHandlerDraggable,
+      isRowDraggable,
+      isColDraggable,
+      innerPagination,
+      setDragSortPrimaryTableRef,
+      setDragSortColumns,
+    } = useDragSort(props, context, dragSortParams);
 
     const { renderTitleWidthIcon } = useTableHeader(props);
     const { renderAsyncLoading } = useAsyncLoading(props);
 
+    // 可编辑行
     const {
       errorListMap,
       editableKeysMap,
@@ -103,8 +148,14 @@ export default defineComponent({
       validateTableData,
       onRuleChange,
       clearValidateData,
+      onUpdateEditedCell,
+      getEditRowData,
       onPrimaryTableCellEditChange,
     } = useEditableRow(props);
+
+    const innerKeyboardRowHover = computed(() => Boolean(showExpandedRow.value || showRowSelect.value));
+
+    const innerDisableSpaceInactiveRow = computed(() => Boolean(showExpandedRow.value || showRowSelect.value));
 
     const primaryTableClasses = computed(() => {
       return {
@@ -113,6 +164,9 @@ export default defineComponent({
         [tableDraggableClasses.rowDraggable]: isRowDraggable.value,
         [tableBaseClass.overflowVisible]: isTableOverflowHidden.value === false,
         [tableBaseClass.tableRowEdit]: props.editableRowKeys,
+        [`${classPrefix}-table--select-${selectColumn.value?.type}`]: selectColumn.value,
+        [`${classPrefix}-table--row-select`]: showRowSelect.value,
+        [`${classPrefix}-table--row-expandable`]: showExpandedRow.value,
       };
     });
 
@@ -146,7 +200,7 @@ export default defineComponent({
         primaryTableRef.value.refreshTable();
       },
       scrollToElement: (data: ScrollToElementParams) => {
-        primaryTableRef.value.virtualConfig.scrollToElement(data);
+        primaryTableRef.value.scrollToElement(data);
       },
       scrollColumnIntoView: (colKey: string) => {
         primaryTableRef.value.scrollColumnIntoView(colKey);
@@ -155,14 +209,27 @@ export default defineComponent({
       baseTableRef: primaryTableRef,
     });
 
+    const onEditableCellChange: EditableCellProps['onChange'] = (params) => {
+      props.onRowEdit?.(params);
+      const rowValue = get(params.editedRow, props.rowKey || 'id');
+      onUpdateEditedCell(rowValue, params.row, {
+        [params.col.colKey]: params.value,
+      });
+    };
+
     // 1. 影响列数量的因素有：自定义列配置、展开/收起行、多级表头；2. 影响表头内容的因素有：排序图标、筛选图标
-    const getColumns = (columns: PrimaryTableCol<TableRowData>[]) => {
+    const getColumns = (columns: PrimaryTableCol<TableRowData>[], parentDisplay = false) => {
       const arr: PrimaryTableCol<TableRowData>[] = [];
       for (let i = 0, len = columns.length; i < len; i++) {
         let item = { ...columns[i] };
         // 自定义列显示控制
         const isDisplayColumn = item.children?.length || tDisplayColumns.value?.includes(item.colKey);
-        if (!isDisplayColumn && props.columnController) continue;
+        if (
+          !isDisplayColumn &&
+          (props.columnController || props.displayColumns || props.defaultDisplayColumns) &&
+          !parentDisplay
+        )
+          continue;
         item = formatToRowSelectColumn(item);
         const { sort } = props;
         if (item.sorter && props.showSortColumnBgColor) {
@@ -194,7 +261,7 @@ export default defineComponent({
               attach,
               {
                 classPrefix,
-                ellipsisOverlayClassName: props.size !== 'medium' ? sizeClassNames[props.size] : '',
+                ellipsisOverlayClassName: tableSize.value !== 'medium' ? sizeClassNames[tableSize.value] : '',
               },
             );
           };
@@ -206,10 +273,12 @@ export default defineComponent({
           item.cell = (h, p: PrimaryTableCellParams<TableRowData>) => {
             const cellProps: EditableCellProps = {
               ...p,
+              row: getEditRowData(p),
               oldCell,
+              rowKey: props.rowKey || 'id',
               tableBaseClass,
               cellEmptyContent: props.cellEmptyContent,
-              onChange: props.onRowEdit,
+              onChange: onEditableCellChange,
               onValidate: props.onRowValidate,
               onRuleChange,
               onEditableChange: onPrimaryTableCellEditChange,
@@ -224,11 +293,11 @@ export default defineComponent({
             if (props.editableCellState) {
               cellProps.readonly = !props.editableCellState(p);
             }
-            return <EditableCell {...cellProps} v-slots={context.slots} />;
+            return <EditableCell {...cellProps} v-slots={context.slots} onUpdateEditedCell={onUpdateEditedCell} />;
           };
         }
         if (item.children?.length) {
-          item.children = getColumns(item.children);
+          item.children = getColumns(item.children, parentDisplay || tDisplayColumns.value?.includes(item.colKey));
         }
         // 多级表头和自定义列配置特殊逻辑：要么子节点不存在，要么子节点长度大于 1，方便做自定义列配置
         if (!item.children || item.children?.length) {
@@ -247,6 +316,7 @@ export default defineComponent({
     });
 
     const onInnerPageChange = (pageInfo: PageInfo, newData: Array<TableRowData>) => {
+      innerPagination.value = { ...innerPagination.value, ...pageInfo };
       currentPaginateData.value = newData;
       props.onPageChange?.(pageInfo, newData);
       const changeParams: Parameters<TdPrimaryTableProps['onChange']> = [
@@ -264,14 +334,27 @@ export default defineComponent({
       }
     };
 
+    const onInnerActiveRowAction: BaseTableProps['onActiveRowAction'] = (params) => {
+      props.onActiveRowAction?.(params);
+      handleRowSelectWithAreaSelection(params);
+    };
+
+    const onSingleRowClick: TdPrimaryTableProps['onRowClick'] = (params) => {
+      if (props.expandOnRowClick) {
+        onInnerExpandRowClick(params);
+      }
+      if (props.selectOnRowClick) {
+        onInnerSelectRowClick(params);
+      }
+    };
+
     // handle click and dblclick exits at the same time
     let timer: any;
     const DURATION = 250;
     const onInnerRowClick: TdPrimaryTableProps['onRowClick'] = (params) => {
       // no dbl click conflict, no delay
       if (!props.onRowDblclick) {
-        onInnerExpandRowClick(params);
-        onInnerSelectRowClick(params);
+        onSingleRowClick(params);
         return;
       }
       if (timer) {
@@ -280,11 +363,14 @@ export default defineComponent({
         timer = undefined;
       } else {
         timer = setTimeout(() => {
-          onInnerExpandRowClick(params);
-          onInnerSelectRowClick(params);
+          onSingleRowClick(params);
           timer = undefined;
         }, DURATION);
       }
+    };
+
+    const onShowElementChange = (val: boolean) => {
+      showElement.value = val;
     };
 
     return () => {
@@ -326,18 +412,26 @@ export default defineComponent({
       const firstFullRow = formatNode('firstFullRow', renderFirstFilterRow, !hasEmptyCondition.value);
       const lastFullRow = formatNode('lastFullRow', renderAsyncLoading, !!props.asyncLoading);
 
-      const baseTableProps = {
-        ...omit(props, OMIT_PROPS),
+      // important for base-table controlled properties
+      const { vnode } = getCurrentInstance();
+
+      const baseTableProps: BaseTableProps = {
+        ...omit(vnode.props, OMIT_PROPS),
+        rowKey: props.rowKey,
         rowClassName: tRowClassNames.value,
         rowAttributes: tRowAttributes.value,
         columns: tColumns.value,
+        keyboardRowHover: props.keyboardRowHover ?? innerKeyboardRowHover.value,
+        disableSpaceInactiveRow: props.disableSpaceInactiveRow ?? innerDisableSpaceInactiveRow.value,
         topContent,
         bottomContent,
         firstFullRow,
         lastFullRow,
         thDraggable: ['col', 'row-handler-col'].includes(props.dragSort),
+        onShowElementChange,
         onPageChange: onInnerPageChange,
         renderExpandedRow: showExpandedRow.value ? renderExpandedRow : undefined,
+        onActiveRowAction: onInnerActiveRowAction,
       };
 
       if (props.expandOnRowClick || props.selectOnRowClick) {
@@ -345,11 +439,10 @@ export default defineComponent({
       }
 
       return (
-        // @ts-ignore
         <BaseTable
-          ref={primaryTableRef}
           v-slots={context.slots}
           {...baseTableProps}
+          ref={primaryTableRef}
           class={primaryTableClasses.value}
           onLeafColumnsChange={setDragSortColumns}
         />

@@ -15,6 +15,7 @@
           :data="data"
           :sort="sort"
           :multiple-sort="allowMultipleSort"
+          lazy-load
           @sort-change="sortChange"
           @data-change="dataChange"
         >
@@ -86,7 +87,7 @@ const columns = ref([
 ]);
 
 const data = ref([...initialData]);
-const sort = ref({});
+const sort = ref();
 const singleSort = ref({
   sortBy: 'status',
   descending: true,
