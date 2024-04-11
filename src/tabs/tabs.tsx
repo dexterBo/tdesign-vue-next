@@ -36,27 +36,31 @@ export default defineComponent({
       setTabValue(value);
     };
     const onTabRemove = ({ e, value, index }: Parameters<TdTabsProps['onRemove']>[0]) => {
-      props.onRemove({ value, index, e });
+      props.onRemove?.({ value, index, e });
     };
 
     // render
     const getSlotPanels = () => {
-      let content = renderTNodeJSX('default');
+      const content = renderTNodeJSX('default');
       if (!content) return [];
-      content = content
-        .map((item: ComponentPublicInstance) => {
-          if (item.children && isArray(item.children)) return item.children;
-          return item;
-        })
-        .flat()
-        .filter((item: ComponentPublicInstance) => {
-          return item.type.name === 'TTabPanel';
-        });
 
-      return content;
+      const flatContent = (ct: any) => {
+        return ct
+          .map((item: ComponentPublicInstance) => {
+            if (item.children && isArray(item.children)) return flatContent(item.children);
+            return item;
+          })
+          .flat()
+          .filter((item: ComponentPublicInstance) => {
+            return item.type.name === 'TTabPanel';
+          });
+      };
+
+      return flatContent(content);
     };
     const renderHeader = () => {
       const panels = (props.list?.length ? props.list : getSlotPanels()) || [];
+      const actionContent = renderTNodeJSX('action');
       const panelsData = panels.map((item: ComponentPublicInstance) => {
         const selfItem = item;
 
@@ -77,6 +81,7 @@ export default defineComponent({
         addable: props.addable,
         panels: panelsData,
         dragSort: props.dragSort,
+        action: actionContent,
       };
       return (
         <div

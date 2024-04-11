@@ -8,6 +8,7 @@
     :selected-row-keys="selectedRowKeys"
     bordered
     stripe
+    lazy-load
     @change="rehandleChange"
     @page-change="onPageChange"
     @select-change="onSelectChange"
@@ -32,7 +33,6 @@ const columns = [
     width: 46,
   },
   {
-    width: 200,
     colKey: 'name',
     title: '姓名',
     render(h, { type, row: { name } }) {
@@ -43,8 +43,8 @@ const columns = [
   {
     colKey: 'status',
     title: '申请状态',
-    width: '150',
-    cell: (h, { _row, rowIndex }) => {
+    // eslint-disable-next-line
+    cell: (h, { row, rowIndex }) => {
       const status = rowIndex % 3;
       return (
         <t-tag shape="round" theme={statusNameListMap[status].theme} variant="light-outline">
@@ -55,7 +55,6 @@ const columns = [
     },
   },
   {
-    width: 200,
     colKey: 'phone',
     title: '联系方式',
     render(h, { row: { phone } }) {
@@ -65,7 +64,6 @@ const columns = [
   {
     colKey: 'email',
     title: '邮箱',
-    width: 180,
     ellipsis: true,
   },
 ];

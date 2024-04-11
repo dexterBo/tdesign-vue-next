@@ -20,6 +20,7 @@ import { TdColorModes } from '../interfaces';
 import { useBaseClassName } from '../hooks';
 import useVModel from '../../hooks/useVModel';
 import useDefaultValue from '../../hooks/useDefaultValue';
+import cloneDeep from 'lodash/cloneDeep';
 
 export default defineComponent({
   name: 'ColorPanel',
@@ -43,7 +44,7 @@ export default defineComponent({
     const mode = ref<TdColorModes>(props.colorModes?.length === 1 ? props.colorModes[0] : 'monochrome');
     const isGradient = computed(() => mode.value === 'linear-gradient');
 
-    const color = ref<Color>(new Color(innerValue.value || defaultEmptyColor.value));
+    const color = computed<Color>(() => new Color(innerValue.value || defaultEmptyColor.value));
     const updateColor = () => color.value.update(innerValue.value || defaultEmptyColor.value);
 
     const formatModel = ref<TdColorPickerProps['format']>(color.value.isGradient ? 'CSS' : 'RGB');
@@ -71,7 +72,7 @@ export default defineComponent({
       if (recentlyUsedColors.value === null || recentlyUsedColors.value === false) {
         return;
       }
-      const colors = (recentlyUsedColors.value as string[]) || [];
+      const colors = cloneDeep(recentlyUsedColors.value as string[]) || [];
       const currentColor = color.value.isGradient ? color.value.linearGradient : color.value.rgba;
       const index = colors.indexOf(currentColor);
       if (index > -1) {
@@ -89,7 +90,6 @@ export default defineComponent({
      * @param colors
      */
     const handleRecentlyUsedColorsChange = (colors: string[]) => {
-      recentlyUsedColors.value = colors;
       setRecentlyUsedColors(colors);
     };
 
