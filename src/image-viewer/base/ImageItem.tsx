@@ -23,6 +23,7 @@ export default defineComponent({
     const { transform, mouseDownHandler } = useDrag({ translateX: 0, translateY: 0 });
     const { globalConfig } = useConfig('imageViewer');
     const errorText = globalConfig.value.errorText;
+    const svgElRef = ref<HTMLDivElement>();
 
     const imgStyle = computed(() => ({
       transform: `rotate(${props.rotate}deg) scale(${props.scale})`,
@@ -55,14 +56,20 @@ export default defineComponent({
       }
       const svgText = await response.text();
 
-      const element = document.querySelector('[data-alt="svg"]');
+      const element = svgElRef.value;
       element.innerHTML = '';
       element.classList?.add(`${classPrefix.value}-image-viewer__modal-image-svg`);
       const shadowRoot = element.attachShadow({ mode: 'closed' });
 
       const container = document.createElement('div');
 
-      container.style.background = 'transparent';
+      container.style.background = 'var(--td-bg-color-container)';
+      container.style.padding = '4px';
+      container.style.borderRadius = '4px';
+      container.style.maxHeight = '100%';
+      container.style.maxWidth = '100%';
+      container.style.boxSizing = 'border-box';
+      container.style.height = 'auto';
       container.innerHTML = svgText;
       shadowRoot.appendChild(container);
 
@@ -79,17 +86,20 @@ export default defineComponent({
 
           // svg viewbox x(0) and y(1) offset, width(2) and height(3),eg
           const svgViewBoxWidth = viewBoxValues[2];
-          const svgViewBoxHeight = viewBoxValues[3];
+          // const svgViewBoxHeight = viewBoxValues[3];
           container.style.width = `${svgViewBoxWidth}px`;
-          container.style.height = `${svgViewBoxHeight}px`;
         } else {
           const bbox = svgElement.getBBox();
           const calculatedViewBox = `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`;
           svgElement.setAttribute('viewBox', calculatedViewBox);
 
           container.style.width = `${bbox.width}px`;
-          container.style.height = `${bbox.height}px`;
         }
+        svgElement.style.maxHeight = '100%';
+        svgElement.style.maxWidth = '100%';
+        svgElement.style.height = 'auto';
+        svgElement.style.display = 'block';
+        svgElement.style.lineHeight = 'normal';
       }
       loaded.value = true;
     };
@@ -152,6 +162,7 @@ export default defineComponent({
 
           {!error.value && mainImagePreviewUrl.value && isSvg.value && (
             <div
+              ref={svgElRef}
               class={`${classPrefix.value}-image-viewer__modal-image`}
               onMousedown={(event: MouseEvent) => {
                 event.stopPropagation();

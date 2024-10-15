@@ -19,7 +19,7 @@ import { useConfig, usePrefixClass } from '../hooks/useConfig';
 import { selectInjectKey, getSingleContent, getMultipleContent } from './helper';
 import { useSelectOptions } from './hooks/useSelectOptions';
 import useKeyboardControl from './hooks/useKeyboardControl';
-import type { PopupVisibleChangeContext } from '../popup';
+import type { PopupProps, PopupVisibleChangeContext } from '../popup';
 import type { SelectInputValueChangeContext } from '../select-input';
 import type { TdSelectProps, SelectValue } from './type';
 import { SelectInputValueDisplayOptions } from '../select-input/useSingle';
@@ -242,6 +242,7 @@ export default defineComponent({
       onCheckAllChange,
       getSelectedOptions,
       displayOptions: displayOptions.value,
+      emitBlur: handleOptionEmitBlur,
     }));
 
     provide(selectInjectKey, SelectProvider);
@@ -272,10 +273,24 @@ export default defineComponent({
       });
     };
 
+    const handleOptionEmitBlur = (e: MouseEvent | KeyboardEvent) => {
+      props.onBlur?.({ e, value: innerValue.value });
+    };
+
     const handlerPopupVisibleChange = (visible: boolean, context: PopupVisibleChangeContext) => {
       setInnerPopupVisible(visible, context);
       // 在通过点击选择器打开弹窗时 清空此前的输入内容 避免在关闭时就清空引起的闪烁问题
       if (visible && context.trigger === 'trigger-element-click') setInputValue('');
+    };
+
+    const handlerPopupScrollToBottom: PopupProps['onScrollToBottom'] = async (context) => {
+      const { popupProps } = props;
+      if (props.loading) {
+        return;
+      }
+      // @ts-ignore types 中只有 onScrollToBottom，但 Vue 会自动转换 on-scroll-to-bottom 并支持，故此处都进行调用
+      popupProps?.['on-scroll-to-bottom']?.(context);
+      popupProps?.onScrollToBottom?.(context);
     };
 
     const addCache = (val: SelectValue) => {
@@ -386,6 +401,7 @@ export default defineComponent({
             popupProps={{
               overlayClassName: [`${COMPONENT_NAME.value}__dropdown`, overlayClassName],
               ...restPopupProps,
+              onScrollToBottom: handlerPopupScrollToBottom,
             }}
             label={props.label}
             prefixIcon={props.prefixIcon}
@@ -421,8 +437,11 @@ export default defineComponent({
               props.onClear?.({ e });
             }}
             onEnter={(inputValue, { e }) => {
-              props.onEnter?.({ inputValue: `${innerInputValue.value}`, e, value: innerValue.value });
-              handleCreate();
+              // onEnter和handleKeyDown的Enter事件同时触发，需要通过setTimeout设置先后
+              setTimeout(() => {
+                props.onEnter?.({ inputValue: `${innerInputValue.value}`, e, value: innerValue.value });
+                handleCreate();
+              }, 0);
             }}
             onBlur={(inputValue, { e }) => {
               props.onBlur?.({ e, value: innerValue.value });
