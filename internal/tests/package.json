@@ -1,0 +1,10 @@
+{
+  "name": "@tdesign/internal-tests",
+  "private": true,
+  "author": "tdesign",
+  "license": "MIT",
+  "devDependencies": {
+    "@testing-library/dom": "catalog:test",
+    "vitest": "catalog:test"
+  }
+}
